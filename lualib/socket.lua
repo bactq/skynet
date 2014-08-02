@@ -56,11 +56,19 @@ socket_message[1] = function(id, size, data)
 			s.read_required = nil
 			wakeup(s)
 		end
-	elseif rrt == "string" then
-		-- read line
-		if driver.readline(s.buffer,nil,rr) then
-			s.read_required = nil
-			wakeup(s)
+	else
+		if s.buffer_limit and sz > s.buffer_limit then
+			skynet.error(string.format("socket buffer overlow: fd=%d size=%d", id , sz))
+			driver.clear(s.buffer,buffer_pool)
+			driver.close(id)
+			return
+		end
+		if rrt == "string" then
+			-- read line
+			if driver.readline(s.buffer,nil,rr) then
+				s.read_required = nil
+				wakeup(s)
+			end
 		end
 	end
 end
@@ -199,6 +207,27 @@ end
 function socket.read(id, sz)
 	local s = socket_pool[id]
 	assert(s)
+	if sz == nil then
+		-- read some bytes
+		local ret = driver.readall(s.buffer, buffer_pool)
+		if ret ~= "" then
+			return ret
+		end
+
+		if not s.connected then
+			return false, ret
+		end
+		assert(not s.read_required)
+		s.read_required = 0
+		suspend(s)
+		ret = driver.readall(s.buffer, buffer_pool)
+		if ret ~= "" then
+			return ret
+		else
+			return false, ret
+		end
+	end
+
 	local ret = driver.pop(s.buffer, buffer_pool, sz)
 	if ret then
 		return ret
@@ -266,12 +295,19 @@ end
 
 socket.write = assert(driver.send)
 socket.lwrite = assert(driver.lsend)
+socket.header = assert(driver.header)
 
 function socket.invalid(id)
 	return socket_pool[id] == nil
 end
 
-socket.listen = assert(driver.listen)
+function socket.listen(host, port, backlog)
+	if port == nil then
+		host, port = string.match(host, "([^:]+):(.+)$")
+		port = tonumber(port)
+	end
+	return driver.listen(host, port, backlog)
+end
 
 function socket.lock(id)
 	local s = socket_pool[id]
@@ -309,6 +345,11 @@ function socket.abandon(id)
 		driver.clear(s.buffer,buffer_pool)
 	end
 	socket_pool[id] = nil
+end
+
+function socket.limit(id, limit)
+	local s = assert(socket_pool[id])
+	s.buffer_limit = limit
 end
 
 return socket

@@ -88,7 +88,7 @@ end
 
 skynet.start(function()
 	local listen_socket = socket.listen ("127.0.0.1", port)
-	print("Start debug console at 127.0.0.1",port)
+	skynet.error("Start debug console at 127.0.0.1 " .. port)
 	socket.start(listen_socket , function(id, addr)
 		local function print(...)
 			local t = { ... }
@@ -113,6 +113,7 @@ function COMMAND.help()
 		snax = "lanuch a new snax service",
 		clearcache = "clear lua code cache",
 		service = "List unique service",
+		task = "task address : show service task detail",
 	}
 end
 
@@ -121,8 +122,8 @@ function COMMAND.clearcache()
 end
 
 function COMMAND.start(...)
-	local addr = skynet.newservice(...)
-	if addr then
+	local ok, addr = pcall(skynet.newservice, ...)
+	if ok then
 		return { [skynet.address(addr)] = ... }
 	else
 		return "Failed"
@@ -130,8 +131,8 @@ function COMMAND.start(...)
 end
 
 function COMMAND.snax(...)
-	local s = snax.newservice(...)
-	if s then
+	local ok, s = pcall(snax.newservice, ...)
+	if ok then
 		local addr = s.handle
 		return { [skynet.address(addr)] = ... }
 	else
